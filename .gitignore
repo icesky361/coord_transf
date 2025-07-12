@@ -1,0 +1,31 @@
+# 忽略现有文件夹
+build/
+dist/
+历史程序/
+历史表/
+
+# 忽略Excel文件
+*.xlsx
+*.xls
+
+# 忽略日志文件
+app.log
+
+# 忽略打包相关文件
+*.spec
+icon.ico
+
+# 忽略Python字节码和缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 忽略虚拟环境
+venv/
+env/
+ENV/
+
+# 其他常见忽略项
+.DS_Store
+Thumbs.db
