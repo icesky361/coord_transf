@@ -14,7 +14,6 @@ dist/
 *.bmp
 # 忽略文本文件
 *.txt
-*.md
 # 忽略日志文件
 app.log
 
