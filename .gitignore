@@ -7,10 +7,11 @@ dist/
 # 忽略Excel文件
 *.xlsx
 *.xls
-*.png
+# 忽略图片文件
+*png
 *.jpg
 *.jpeg
-*.pdf
+*.bmp
 # 忽略日志文件
 app.log
 
