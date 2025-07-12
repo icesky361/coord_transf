@@ -8,6 +8,9 @@ dist/
 *.xlsx
 *.xls
 *.png
+*.jpg
+*.jpeg
+*.pdf
 # 忽略日志文件
 app.log
 
