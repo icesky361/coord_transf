@@ -251,17 +251,18 @@ def main():
             print("\n当前目录下没有Excel文件！")
             return
         
-        # 提示用户输入文件名
+        # 提示用户输入文件序号
         while True:
-            input_filename = input("\n请输入需处理的文件名(不含路径，例如：data.xlsx): ")
-            if input_filename.endswith('.xlsx'):
-                input_file = os.path.join(base_path, input_filename)
-                if os.path.exists(input_file):
+            try:
+                file_index = int(input("\n请输入文件序号(1-{}): ".format(len(excel_files))))
+                if 1 <= file_index <= len(excel_files):
+                    input_filename = excel_files[file_index - 1]
+                    input_file = os.path.join(base_path, input_filename)
                     break
                 else:
-                    print(f"文件 {input_filename} 不存在，请重新输入！")
-            else:
-                print("请输入有效的Excel文件名(.xlsx)")
+                    print(f"输入无效，请输入1到{len(excel_files)}之间的数字！")
+            except ValueError:
+                print("输入无效，请输入一个数字！")
         
         # 根据模式设置转换函数和输出文件名
         filename_without_ext = os.path.splitext(input_filename)[0]
