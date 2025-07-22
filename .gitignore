@@ -18,6 +18,7 @@ icon.ico
 # 电子表格文件
 *.xlsx
 *.xls
+*.csv
 # 图片文件
 *.png
 *.jpg
