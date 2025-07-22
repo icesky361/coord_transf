@@ -3,6 +3,7 @@ import pandas as pd
 from sklearn.preprocessing import PolynomialFeatures
 from pyproj import Transformer
 from sklearn.linear_model import Ridge
+import xgboost as xgb  # 添加此行导入xgboost
 
 # 1. 加载数据（示例格式）
 # 假设CSV包含字段: gd_lon, gd_lat, sj_lon, sj_lat
@@ -99,7 +100,13 @@ X = pd.DataFrame(gd_poly, columns=poly_features)
 y_x = data["sj_x"] - data["gd_x"]
 y_y = data["sj_y"] - data["gd_y"]
 
-# 添加数据拆分步骤
+# 添加标签数据清洗
+mask = ~np.isnan(y_x) & ~np.isnan(y_y) & ~np.isinf(y_x) & ~np.isinf(y_y)
+X = X[mask]
+y_x = y_x[mask]
+y_y = y_y[mask]
+
+# 数据拆分步骤
 from sklearn.model_selection import train_test_split
 X_train, X_test, yx_train, yx_test, yy_train, yy_test = train_test_split(
     X, y_x, y_y, test_size=0.2, random_state=42
@@ -160,3 +167,9 @@ def convert_coord(lon, lat):
     # 转回经纬度
     sj_lat, sj_lon = transformer.transform(sj_x, sj_y, direction="INVERSE")
     return sj_lon, sj_lat
+
+# 坐标转换后检查
+print("转换后坐标NaN检查:")
+print(data[["gd_x", "gd_y", "sj_x", "sj_y"]].isna().sum())
+
+data = data.dropna(subset=["gd_x", "gd_y", "sj_x", "sj_y"])
