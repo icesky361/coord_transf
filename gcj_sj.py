@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import PolynomialFeatures
 from pyproj import Transformer
+from sklearn.linear_model import Ridge
 
 # 1. 加载数据（示例格式）
 # 假设CSV包含字段: gd_lon, gd_lat, sj_lon, sj_lat
@@ -27,7 +28,7 @@ for col in ['高德经度','高德纬度','思极经度','思极纬度']:
 print("清洗后数据统计:")
 print(data.describe())
 
-# 提取坐标数据
+# 定义坐标变量
 gd_coords = data[['高德经度', '高德纬度']].values
 sj_coords = data[['思极经度', '思极纬度']].values
 
@@ -35,12 +36,16 @@ sj_coords = data[['思极经度', '思极纬度']].values
 from sklearn.preprocessing import StandardScaler
 scaler = StandardScaler()
 gd_coords_scaled = scaler.fit_transform(gd_coords)
+poly = PolynomialFeatures(degree=1, include_bias=False)
+gd_poly = poly.fit_transform(gd_coords)
+# 检查数值范围
+max_val = np.max(np.abs(gd_coords))
+if max_val > 1e6:
+    print(f'警告：发现极大值 {max_val}，可能影响数值稳定性')
+print("多项式特征值范围:", np.min(gd_poly), np.max(gd_poly))
 
 print("非数字值检查:")
 print(data.isna().sum())
-# 定义坐标变量
-gd_coords = data[['高德经度', '高德纬度']].values
-sj_coords = data[['思极经度', '思极纬度']].values
 
 
 # 删除包含NaN的行
@@ -79,9 +84,14 @@ data["gd_x"], data["gd_y"] = transformer.transform(data["高德经度"], data["�
 data["sj_x"], data["sj_y"] = transformer.transform(data["思极经度"], data["思极纬度"])
 
 # 3. 构建多项式特征（增强非线性拟合能力）[7,8](@ref)
-poly = PolynomialFeatures(degree=2, include_bias=False)
-gd_coords = data[["gd_x", "gd_y"]]
+# 多项式特征生成（降为1次）
+
 gd_poly = poly.fit_transform(gd_coords)
+
+# 添加Ridge正则化模型
+model = Ridge(alpha=1.0)
+model.fit(gd_poly, sj_coords)
+
 poly_features = poly.get_feature_names_out(["gd_x", "gd_y"])
 X = pd.DataFrame(gd_poly, columns=poly_features)
 
@@ -89,8 +99,11 @@ X = pd.DataFrame(gd_poly, columns=poly_features)
 y_x = data["sj_x"] - data["gd_x"]
 y_y = data["sj_y"] - data["gd_y"]
 
-
-import xgboost as xgb
+# 添加数据拆分步骤
+from sklearn.model_selection import train_test_split
+X_train, X_test, yx_train, yx_test, yy_train, yy_test = train_test_split(
+    X, y_x, y_y, test_size=0.2, random_state=42
+)
 
 # 经度偏移模型
 dtrain_x = xgb.DMatrix(X_train, label=yx_train)
@@ -147,8 +160,3 @@ def convert_coord(lon, lat):
     # 转回经纬度
     sj_lat, sj_lon = transformer.transform(sj_x, sj_y, direction="INVERSE")
     return sj_lon, sj_lat
-
-# 测试转换
-test_lon, test_lat = 116.404, 39.915
-sj_lon, sj_lat = convert_coord(test_lon, test_lat)
-print(f"高德坐标({test_lon}, {test_lat}) → 思极坐标({sj_lon:.6f}, {sj_lat:.6f})")
