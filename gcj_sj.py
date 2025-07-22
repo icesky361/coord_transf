@@ -89,14 +89,23 @@ data["sj_x"], data["sj_y"] = transformer.transform(data["思极经度"], data["�
 gd_coords = data[['gd_x', 'gd_y']].values
 sj_coords = data[['sj_x', 'sj_y']].values
 
+# 添加坐标数组标准化
+from sklearn.preprocessing import StandardScaler
+
+# 标准化坐标以避免数值溢出
+gd_scaler = StandardScaler()
+gd_coords_scaled = gd_scaler.fit_transform(gd_coords)
+
+sj_scaler = StandardScaler()
+sj_coords_scaled = sj_scaler.fit_transform(sj_coords)
+
 # 3. 构建多项式特征（增强非线性拟合能力）[7,8](@ref)
 # 多项式特征生成（降为1次）
-
-gd_poly = poly.fit_transform(gd_coords)
+gd_poly = poly.fit_transform(gd_coords_scaled)
 
 # 添加Ridge正则化模型
 model = Ridge(alpha=1.0)
-model.fit(gd_poly, sj_coords)
+model.fit(gd_poly, sj_coords_scaled)
 
 poly_features = poly.get_feature_names_out(["gd_x", "gd_y"])
 X = pd.DataFrame(gd_poly, columns=poly_features)
