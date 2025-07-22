@@ -79,6 +79,9 @@ import numpy as np
 data = data.replace([np.inf, -np.inf], np.nan)
 # 删除包含NaN的行
 data = data.dropna()
+# 添加这行：在数据清洗后重新定义坐标数组
+gd_coords = data[['gd_x', 'gd_y']].values
+sj_coords = data[['sj_x', 'sj_y']].values
 # 2. 计算平面直角坐标（避免球面距离误差）[2](@ref)
 transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857")  # WGS84转Web墨卡托
 data["gd_x"], data["gd_y"] = transformer.transform(data["高德经度"], data["高德纬度"])
@@ -106,9 +109,15 @@ X = X[mask]
 y_x = y_x[mask]
 y_y = y_y[mask]
 
-# 数据拆分步骤
+# 添加数据检查确保样本不为空
+if len(X) == 0:
+    raise ValueError("掩码操作后样本数量为0，请检查数据清洗逻辑")
+print(f"掩码后剩余样本数量: {len(X)}")
+
+# 数据拆分步骤 - 修复参数顺序
 from sklearn.model_selection import train_test_split
-X_train, X_test, yx_train, yx_test, yy_train, yy_test = train_test_split(
+# 使用元组形式正确拆分多目标变量
+(X_train, X_test), (yx_train, yx_test), (yy_train, yy_test) = train_test_split(
     X, y_x, y_y, test_size=0.2, random_state=42
 )
 
