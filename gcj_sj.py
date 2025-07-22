@@ -79,13 +79,15 @@ import numpy as np
 data = data.replace([np.inf, -np.inf], np.nan)
 # 删除包含NaN的行
 data = data.dropna()
-# 添加这行：在数据清洗后重新定义坐标数组
-gd_coords = data[['gd_x', 'gd_y']].values
-sj_coords = data[['sj_x', 'sj_y']].values
+
 # 2. 计算平面直角坐标（避免球面距离误差）[2](@ref)
 transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857")  # WGS84转Web墨卡托
 data["gd_x"], data["gd_y"] = transformer.transform(data["高德经度"], data["高德纬度"])
 data["sj_x"], data["sj_y"] = transformer.transform(data["思极经度"], data["思极纬度"])
+
+# 添加这两行：在坐标转换后定义坐标数组
+gd_coords = data[['gd_x', 'gd_y']].values
+sj_coords = data[['sj_x', 'sj_y']].values
 
 # 3. 构建多项式特征（增强非线性拟合能力）[7,8](@ref)
 # 多项式特征生成（降为1次）
@@ -180,5 +182,3 @@ def convert_coord(lon, lat):
 # 坐标转换后检查
 print("转换后坐标NaN检查:")
 print(data[["gd_x", "gd_y", "sj_x", "sj_y"]].isna().sum())
-
-data = data.dropna(subset=["gd_x", "gd_y", "sj_x", "sj_y"])
