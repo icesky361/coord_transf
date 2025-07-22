@@ -6,9 +6,68 @@ from pyproj import Transformer
 # 1. 加载数据（示例格式）
 # 假设CSV包含字段: gd_lon, gd_lat, sj_lon, sj_lat
 data = pd.read_excel("坐标数据.xlsx", sheet_name="坐标数据")  # 改为xlsx读取
+# 在读取数据后添加严格清洗
+import re
+
+def clean_coord(value):
+    if pd.isna(value):
+        return np.nan
+    try:
+        # 移除所有非数字和负号、小数点字符
+        cleaned = re.sub(r'[^0-9\-\.]', '', str(value))
+        return float(cleaned)
+    except:
+        return np.nan
+
+# 应用清洗函数
+for col in ['高德经度','高德纬度','思极经度','思极纬度']:
+    data[col] = data[col].apply(clean_coord)
+
+# 再次检查
+print("清洗后数据统计:")
+print(data.describe())
+
+# 提取坐标数据
+gd_coords = data[['高德经度', '高德纬度']].values
+sj_coords = data[['思极经度', '思极纬度']].values
+
+# 数据标准化
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+gd_coords_scaled = scaler.fit_transform(gd_coords)
+
+print("非数字值检查:")
+print(data.isna().sum())
+# 定义坐标变量
+gd_coords = data[['高德经度', '高德纬度']].values
+sj_coords = data[['思极经度', '思极纬度']].values
+
+
+# 删除包含NaN的行
+data = data.dropna()
+
+# 多项式拟合前添加数据缩放
+from sklearn.preprocessing import MinMaxScaler
+scaler = MinMaxScaler(feature_range=(-1, 1))
+scaled_coords = scaler.fit_transform(gd_coords)
 # 在读取数据后添加检查
 print(data.describe())  # 查看数据统计信息
 print(data.isnull().sum())  # 检查空值
+# 添加数据验证
+print("数据统计:")
+print(data.describe())
+print("缺失值检查:")
+print(data.isnull().sum())
+print("无限值检查:")
+print(np.isinf(data[['高德经度', '高德纬度', '思极经度', '思极纬度']].values).sum())
+# 在多项式拟合前添加
+if not all((-180 <= data[['高德经度','思极经度']]).all() <= 180) or \
+   not all((-90 <= data[['高德纬度','思极纬度']]).all() <= 90):
+    print("警告：存在超出正常范围的坐标值")
+    data = data[(-180 <= data[['高德经度','思极经度']]) & 
+               (data[['高德经度','思极经度']] <= 180) &
+               (-90 <= data[['高德纬度','思极纬度']]) &
+               (data[['高德纬度','思极纬度']] <= 90)]
 # 替换无穷大值为NaN
 import numpy as np
 data = data.replace([np.inf, -np.inf], np.nan)
