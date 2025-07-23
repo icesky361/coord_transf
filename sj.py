@@ -7,23 +7,44 @@ from sklearn.metrics import mean_squared_error, r2_score
 import xgboost as xgb
 import matplotlib.pyplot as plt
 import seaborn as sns
+import joblib  # 新增：用于保存和加载模型
+import os  # 新增：用于文件路径操作
 
 # 设置中文显示
 plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC"]
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 class SJCoordinateConverter:
+    """
+    高德坐标系到思极坐标系转换模型
+    
+    该类实现了基于机器学习的坐标转换，通过已知的高德和思极坐标对训练模型，
+    然后使用模型预测新的坐标转换关系。支持随机森林和XGBoost两种算法。
+    """
     def __init__(self):
-        self.model_lng = None
-        self.model_lat = None
-        self.X_train = None
-        self.X_test = None
-        self.y_train = None
-        self.y_test = None
-        self.y_pred = None
+        """初始化转换器实例"""
+        self.model_lng = None  # 经度模型
+        self.model_lat = None  # 纬度模型
+        self.X_train = None    # 训练特征数据
+        self.X_test = None     # 测试特征数据
+        self.y_train = None    # 训练目标数据
+        self.y_test = None     # 测试目标数据
+        self.y_pred = None     # 预测结果
 
     def load_data(self, file_path="坐标数据.xlsx"):
-        """加载Excel数据"""
+        """
+        加载Excel格式的坐标数据
+        
+        Args:
+            file_path (str): 数据文件路径，默认为"坐标数据.xlsx"
+        
+        Returns:
+            pd.DataFrame: 加载的数据框
+        
+        Raises:
+            ValueError: 当数据中缺少必要的列时
+            Exception: 加载文件时的其他错误
+        """
         try:
             df = pd.read_excel(file_path)
             print(f"成功加载数据，共{len(df)}条记录")
@@ -38,7 +59,19 @@ class SJCoordinateConverter:
             raise
 
     def prepare_data(self, df, test_size=0.2, random_state=42):
-        """准备训练数据和测试数据"""
+        """
+        准备训练数据和测试数据
+        
+        将高德坐标作为特征，思极坐标与高德坐标的偏移量作为目标值
+        
+        Args:
+            df (pd.DataFrame): 包含坐标数据的数据框
+            test_size (float): 测试集比例，默认为0.2
+            random_state (int): 随机种子，保证结果可复现
+        
+        Returns:
+            tuple: (X_train, X_test, y_train, y_test) 训练和测试数据
+        """
         # 特征：高德经纬度
         X = df[["高德经度", "高德纬度"]].values.astype(np.float64)
         # 目标：思极经纬度偏移量（而不是直接预测思极坐标）
@@ -54,7 +87,18 @@ class SJCoordinateConverter:
         return self.X_train, self.X_test, self.y_train, self.y_test
 
     def train_model(self, model_type="xgboost"):
-        """训练模型"""
+        """
+        训练坐标转换模型
+        
+        Args:
+            model_type (str): 模型类型，可选"random_forest"或"xgboost"，默认为"xgboost"
+        
+        Returns:
+            MultiOutputRegressor: 训练好的模型
+        
+        Raises:
+            ValueError: 当模型类型不支持或未准备数据时
+        """
         if self.X_train is None or self.y_train is None:
             raise ValueError("请先调用prepare_data方法准备数据")
 
@@ -76,8 +120,49 @@ class SJCoordinateConverter:
         print("模型训练完成")
         return model
 
+    def save_model(self, model, model_path="coordinate_model.pkl"):
+        """
+        保存训练好的模型到文件
+        
+        Args:
+            model: 训练好的模型
+            model_path (str): 模型保存路径，默认为"coordinate_model.pkl"
+        """
+        joblib.dump(model, model_path)
+        print(f"模型已保存到: {os.path.abspath(model_path)}")
+
+    def load_model(self, model_path="coordinate_model.pkl"):
+        """
+        从文件加载训练好的模型
+        
+        Args:
+            model_path (str): 模型文件路径，默认为"coordinate_model.pkl"
+        
+        Returns:
+            加载的模型
+        
+        Raises:
+            FileNotFoundError: 当模型文件不存在时
+        """
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"模型文件不存在: {model_path}")
+        model = joblib.load(model_path)
+        print(f"模型已从{os.path.abspath(model_path)}加载成功")
+        return model
+
     def evaluate_model(self, model):
-        """评估模型性能"""
+        """
+        评估模型性能
+        
+        Args:
+            model: 要评估的模型
+        
+        Returns:
+            tuple: (mse, r2) 均方误差和决定系数
+        
+        Raises:
+            ValueError: 当未准备测试数据时
+        """
         if self.X_test is None or self.y_test is None:
             raise ValueError("请先调用prepare_data方法准备数据")
 
@@ -98,7 +183,14 @@ class SJCoordinateConverter:
         return mse, r2
 
     def visualize_errors(self):
-        """可视化误差分布"""
+        """
+        可视化误差分布
+        
+        生成误差直方图和散点图，保存为"误差分析.png"
+        
+        Raises:
+            ValueError: 当未进行模型评估时
+        """
         if self.y_pred is None or self.y_test is None:
             raise ValueError("请先调用evaluate_model方法评估模型")
 
@@ -144,7 +236,17 @@ class SJCoordinateConverter:
         plt.show()
 
     def convert(self, model, gaode_lng, gaode_lat):
-        """将高德坐标转换为思极坐标"""
+        """
+        将高德坐标转换为思极坐标
+        
+        Args:
+            model: 训练好的模型
+            gaode_lng (float): 高德坐标系经度
+            gaode_lat (float): 高德坐标系纬度
+        
+        Returns:
+            tuple: (sj_lng, sj_lat) 思极坐标系的经度和纬度
+        """
         # 确保输入是浮点数
         gaode_lng = float(gaode_lng)
         gaode_lat = float(gaode_lat)
@@ -159,7 +261,18 @@ class SJCoordinateConverter:
         return sj_lng, sj_lat
 
     def test_conversion(self, model, sample_size=10):
-        """测试转换功能"""
+        """
+        测试转换功能
+        
+        随机选择测试集中的样本进行转换测试，并输出结果
+        
+        Args:
+            model: 训练好的模型
+            sample_size (int): 测试样本数量，默认为10
+        
+        Raises:
+            ValueError: 当未准备测试数据时
+        """
         if self.X_test is None:
             raise ValueError("请先调用prepare_data方法准备数据")
 
@@ -194,6 +307,9 @@ if __name__ == "__main__":
         # 训练模型 - 可以尝试"random_forest"或"xgboost"
         model = converter.train_model(model_type="xgboost")
 
+        # 保存模型
+        converter.save_model(model)
+
         # 评估模型
         converter.evaluate_model(model)
 
@@ -205,6 +321,7 @@ if __name__ == "__main__":
 
         print("\n坐标转换模型已成功训练和测试。")
         print("您可以使用converter.convert(model, gaode_lng, gaode_lat)函数进行坐标转换。")
+        print("模型已保存到当前目录下的'coordinate_model.pkl'文件。")
 
     except Exception as e:
         print(f"程序执行出错: {e}")

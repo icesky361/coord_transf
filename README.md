@@ -100,12 +100,12 @@ def transformlng(x, y):
 ## 高德到思极坐标转换工具 (sj.py)
 
 ### 功能简介
-此工具使用机器学习模型（随机森林或XGBoost）基于已知的坐标对数据，学习高德坐标系到思极坐标系的转换关系。
+此工具使用机器学习模型（随机森林或XGBoost）基于已知的坐标对数据，学习高德坐标系到思极坐标系的转换关系。模型训练完成后会自动保存，便于后续直接加载使用。
 
 ### 环境准备
 安装额外依赖库：
 ```bash
-pip install pandas numpy scikit-learn xgboost matplotlib seaborn openpyxl
+pip install pandas numpy scikit-learn xgboost matplotlib seaborn openpyxl joblib
 ```
 
 ### 数据准备
@@ -113,8 +113,8 @@ pip install pandas numpy scikit-learn xgboost matplotlib seaborn openpyxl
 2. 数据应包含以下列：
    - `高德经度`：高德坐标系的经度
    - `高德纬度`：高德坐标系的纬度
-   - `思级经度`：思极坐标系的经度
-   - `思级纬度`：思极坐标系的纬度
+   - `思极经度`：思极坐标系的经度
+   - `思极纬度`：思极坐标系的纬度
 
 ### 运行方法
 在命令行中执行：
@@ -129,6 +129,48 @@ python sj.py
 - 模型性能评估（MSE和R2评分）
 - 误差分布可视化
 - 提供坐标转换测试和实际应用接口
+- 自动保存训练好的模型到本地文件
+- 支持从本地文件加载已训练的模型
+
+### 模型保存与加载
+- **模型保存位置**：训练完成后，模型会自动保存为当前目录下的`coordinate_model.pkl`文件
+- **加载已保存模型**：可以使用`load_model()`方法加载已训练的模型，无需重新训练
+
+### 测试模型正确性的步骤
+1. **运行脚本**：执行`python sj.py`自动完成模型训练、评估和测试
+2. **查看评估指标**：关注输出的MSE（均方误差）和R2（决定系数）值
+   - MSE值越小越好，接近0表示模型预测越准确
+   - R2值越接近1表示模型解释能力越强
+3. **分析误差可视化**：查看生成的`误差分析.png`文件，了解误差分布情况
+4. **检查转换测试结果**：脚本会随机选择测试样本，输出预测思极坐标与实际思极坐标的对比
+5. **手动测试**：可以使用以下代码片段进行手动测试：
+   ```python
+   from sj import SJCoordinateConverter
+   
+   # 创建转换器实例
+   converter = SJCoordinateConverter()
+   
+   # 加载已保存的模型
+   model = converter.load_model()
+   
+   # 测试特定坐标
+   gaode_lng, gaode_lat = 116.397489, 39.908823  # 示例坐标
+   sj_lng, sj_lat = converter.convert(model, gaode_lng, gaode_lat)
+   print(f"高德坐标: ({gaode_lng}, {gaode_lat}) 转换为思极坐标: ({sj_lng}, {sj_lat})")
+   ```
+
+### 模块与函数关系
+`SJCoordinateConverter`类是工具的核心，包含以下主要方法，按执行流程排列：
+1. `load_data()`：加载坐标数据
+2. `prepare_data()`：准备训练和测试数据
+3. `train_model()`：训练转换模型
+4. `save_model()`：保存训练好的模型
+5. `evaluate_model()`：评估模型性能
+6. `visualize_errors()`：可视化误差分布
+7. `test_conversion()`：测试转换功能
+8. `convert()`：实际应用中的坐标转换
+
+这些方法协同工作，从数据加载到模型训练，再到评估和应用，形成完整的坐标转换流程。
 
 ## 注意事项
 1. 确保Excel文件格式正确，经纬度数据为数字格式
