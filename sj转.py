@@ -69,10 +69,11 @@ class CoordinateInferenceConverter:
         """
         self.direction = direction
         
+        # 从model文件夹加载模型
         if direction == 'gaode_to_sj':
-            model_path = os.path.join(self.base_path, 'gaode_to_sj_model.pkl')
+            model_path = os.path.join(self.base_path, 'model', 'gaode_to_sj_model.pkl')
         elif direction == 'sj_to_gaode':
-            model_path = os.path.join(self.base_path, 'sj_to_gaode_model.pkl')
+            model_path = os.path.join(self.base_path, 'model', 'sj_to_gaode_model.pkl')
         else:
             print(f"错误: 不支持的转换方向 - {direction}")
             return False
@@ -214,9 +215,14 @@ class CoordinateInferenceConverter:
             print("坐标转换完成")
 
             # 确保输出目录存在
-            output_dir = os.path.dirname(output_file)
-            if output_dir and not os.path.exists(output_dir):
-                os.makedirs(output_dir)
+            # 确保run目录存在
+            run_dir = os.path.join(self.base_path, 'run')
+            if not os.path.exists(run_dir):
+                os.makedirs(run_dir)
+            
+            # 输出文件路径调整到run文件夹
+            output_filename = os.path.basename(output_file)
+            output_file = os.path.join(run_dir, output_filename)
 
             # 保存结果
             df.to_excel(output_file, index=False, engine='openpyxl')

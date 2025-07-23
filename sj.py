@@ -141,20 +141,25 @@ class SJCoordinateConverter:
 
     def save_model(self, model, model_path=None):
         """
-        保存训练好的模型到文件
+        保存训练好的模型到model文件夹
         
         Args:
             model: 训练好的模型
             model_path (str, optional): 模型保存路径，如果为None则根据转换方向自动生成
         """
+        # 确保model文件夹存在
+        model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model')
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+            
         if model_path is None:
             if self.direction == 'gaode_to_sj':
-                model_path = 'gaode_to_sj_model.pkl'
+                model_path = os.path.join(model_dir, 'gaode_to_sj_model.pkl')
             elif self.direction == 'sj_to_gaode':
-                model_path = 'sj_to_gaode_model.pkl'
+                model_path = os.path.join(model_dir, 'sj_to_gaode_model.pkl')
             else:
-                model_path = 'coordinate_model.pkl'
-                
+                model_path = os.path.join(model_dir, 'coordinate_model.pkl')
+            
         joblib.dump(model, model_path)
         print(f"模型已保存到: {os.path.abspath(model_path)}")
 
@@ -258,8 +263,15 @@ class SJCoordinateConverter:
         axes[1, 1].axhline(y=0, color='r', linestyle='--')
 
         plt.tight_layout()
-        plt.savefig('误差分析.png', dpi=300, bbox_inches='tight')
-        print("误差可视化完成，已保存为'误差分析.png'")
+        # 确保model文件夹存在
+        model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model')
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+        
+        # 保存误差分析图表到model文件夹
+        error_plot_path = os.path.join(model_dir, '误差分析.png')
+        plt.savefig(error_plot_path, dpi=300, bbox_inches='tight')
+        print(f"误差可视化完成，已保存到: {os.path.abspath(error_plot_path)}")
         plt.show()
 
     def convert(self, model, input_lng, input_lat, direction=None):
@@ -382,7 +394,7 @@ if __name__ == "__main__":
             print("您可以使用converter.convert(model, gaode_lng, gaode_lat)函数进行坐标转换。")
         else:
             print("您可以使用converter.convert(model, sj_lng, sj_lat)函数进行坐标转换。")
-        print(f"模型已保存到当前目录下的'{direction}_model.pkl'文件。")
+        print(f"模型已保存到model文件夹下的'{direction}_model.pkl'文件。")
 
     except Exception as e:
         print(f"程序执行出错: {e}")
