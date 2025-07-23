@@ -34,7 +34,7 @@ class SJCoordinateConverter:
         self.y_pred = None     # 预测结果
         self.direction = None  # 转换方向: 'gaode_to_sj' 或 'sj_to_gaode'
 
-    def load_data(self, file_path="坐标数据.xlsx"):
+    def load_data(self, file_path="思级高德互转_坐标数据源.xlsx"):
         """
         加载Excel格式的坐标数据
         
