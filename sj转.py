@@ -1,28 +1,48 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+高德坐标到思极坐标转换推理工具
+
+该脚本用于加载已训练的坐标转换模型，并批量将Excel文件中的高德坐标转换为思极坐标。
+支持自动识别坐标列和手动选择列功能，适用于处理各种格式的坐标数据。
+"""
 import os
 import sys
-import pandas as pd
-import joblib
-import numpy as np
+import pandas as pd  # 用于Excel文件处理和数据操作
+import joblib        # 用于模型加载和保存
+import numpy as np   # 用于数值计算
 
 # 确保中文显示正常
 import matplotlib.pyplot as plt
 plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC"]
-plt.rcParams['axes.unicode_minus'] = False
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 class SJInferenceConverter:
     """
-    高德坐标系到思极坐标系推理转换工具
+    高德坐标系到思极坐标系推理转换工具类
     
     该类实现了加载已训练的模型，并使用模型进行高德坐标到思极坐标的批量转换。
     支持从Excel文件读取数据并将转换结果保存到新的Excel文件中。
+    
+    主要工作流程：
+    1. 加载训练好的模型
+    2. 读取Excel文件中的坐标数据
+    3. 识别高德经纬度列
+    4. 使用模型进行坐标转换
+    5. 将转换结果保存到新的Excel文件
     """
     def __init__(self):
         """初始化推理转换器实例"""
-        self.model = None
-        self.base_path = self._get_base_path()
+        self.model = None  # 存储加载的模型
+        self.base_path = self._get_base_path()  # 获取程序基准路径
 
     def _get_base_path(self):
-        """获取程序的基准路径"""
+        """
+        获取程序的基准路径
+        
+        Returns:
+            str: 程序所在目录的绝对路径
+        """
         if getattr(sys, 'frozen', False):
             # 如果是打包后的可执行文件
             return os.path.dirname(sys.executable)
@@ -32,10 +52,10 @@ class SJInferenceConverter:
 
     def load_model(self, model_path=None):
         """
-        加载已训练的模型
+        加载已训练的坐标转换模型
         
         Args:
-            model_path (str): 模型文件路径，如果为None则使用默认路径
+            model_path (str, optional): 模型文件路径，如果为None则使用默认路径
         
         Returns:
             bool: 加载成功返回True，否则返回False
@@ -115,15 +135,15 @@ class SJInferenceConverter:
             lat_col (str): 纬度列名
         
         Returns:
-            pd.DataFrame: 包含转换结果的数据框
+            pd.DataFrame: 包含转换结果的数据框，添加了'思极经度'和'思极纬度'列
         """
         # 提取高德坐标
         gaode_coords = df[[lng_col, lat_col]].values.astype(np.float64)
 
-        # 预测偏移量
+        # 预测偏移量 - 模型返回的是思极坐标相对于高德坐标的偏移值
         offsets = self.model.predict(gaode_coords)
 
-        # 计算思极坐标
+        # 计算思极坐标 = 高德坐标 + 偏移量
         sj_lng = gaode_coords[:, 0] + offsets[:, 0]
         sj_lat = gaode_coords[:, 1] + offsets[:, 1]
 
@@ -176,7 +196,11 @@ class SJInferenceConverter:
             return False
 
     def main(self):
-        """主函数，提供命令行交互界面"""
+        """
+        主函数，提供命令行交互界面
+        
+        引导用户选择Excel文件，然后调用相关方法进行坐标转换
+        """
         print("=====================")
         print("  高德坐标转思极坐标  ")
         print("        推理工具      ")
@@ -224,5 +248,6 @@ class SJInferenceConverter:
         input("\n按回车键退出...")
 
 if __name__ == "__main__":
+    # 创建转换器实例并运行主函数
     converter = SJInferenceConverter()
     converter.main()
