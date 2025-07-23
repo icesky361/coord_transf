@@ -85,21 +85,47 @@ transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857")  # WGS84转Web墨�
 data["gd_x"], data["gd_y"] = transformer.transform(data["高德经度"], data["高德纬度"])
 data["sj_x"], data["sj_y"] = transformer.transform(data["思极经度"], data["思极纬度"])
 
+# 添加坐标异常值处理
+# 处理无穷大和缺失值
+data.replace([np.inf, -np.inf], np.nan, inplace=True)
+data.dropna(subset=["gd_x", "gd_y", "sj_x", "sj_y"], inplace=True)
+
+# Web墨卡托坐标范围限制（地球半径约6378137米）
+max_mercator = 20037508.34  # 墨卡托投影最大范围
+# 检查数据量
+print(f"坐标转换后的数据量: {len(data)}")
+data = data[(data["gd_x"].between(-max_mercator, max_mercator)) & 
+            (data["gd_y"].between(-max_mercator, max_mercator)) &
+            (data["sj_x"].between(-max_mercator, max_mercator)) &
+            (data["sj_y"].between(-max_mercator, max_mercator))]
+print(f"墨卡托范围限制后的数据量: {len(data)}")
+
+# 坐标数值缩放
+from sklearn.preprocessing import MinMaxScaler
+coord_scaler = MinMaxScaler(feature_range=(-1, 1))
+# 检查数据是否为空
+if len(data) == 0:
+    raise ValueError("数据清洗后样本数量为0，请检查数据或调整过滤条件")
+data[["gd_x", "gd_y"]] = coord_scaler.fit_transform(data[["gd_x", "gd_y"]])
+data[["sj_x", "sj_y"]] = coord_scaler.transform(data[["sj_x", "sj_y"]])
+
 # 添加这两行：在坐标转换后定义坐标数组
 gd_coords = data[['gd_x', 'gd_y']].values
 sj_coords = data[['sj_x', 'sj_y']].values
 
+# 添加数据类型和范围验证
+print(f"坐标数据类型: {gd_coords.dtype}")
+print(f"坐标值范围: [{gd_coords.min()}, {gd_coords.max()}]")
+if gd_coords.dtype != 'float64':
+    print("警告：坐标数据不是float64类型，正在转换...")
+    gd_coords = gd_coords.astype('float64')
+    sj_coords = sj_coords.astype('float64')
+
 # 添加坐标数组标准化
-from sklearn.preprocessing import StandardScaler
+# 已通过MinMaxScaler将坐标缩放到[-1,1]范围，无需再次标准化
+gd_coords_scaled = gd_coords
+sj_coords_scaled = sj_coords
 
-# 标准化坐标以避免数值溢出
-gd_scaler = StandardScaler()
-gd_coords_scaled = gd_scaler.fit_transform(gd_coords)
-
-sj_scaler = StandardScaler()
-sj_coords_scaled = sj_scaler.fit_transform(sj_coords)
-
-# 3. 构建多项式特征（增强非线性拟合能力）[7,8](@ref)
 # 多项式特征生成（降为1次）
 gd_poly = poly.fit_transform(gd_coords_scaled)
 
