@@ -3,6 +3,13 @@ import sys
 import pandas as pd
 import math
 import re
+import joblib
+import numpy as np
+
+# 确保中文显示正常
+import matplotlib.pyplot as plt
+plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC"]
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 # 定义坐标转换所需的通用函数
 def transformlat(x, y):
@@ -123,6 +130,167 @@ def bd09_to_wgs84(lng, lat):
     gcj02 = bd09_to_gcj02(lng, lat)
     return gcj02_to_wgs84(gcj02[0], gcj02[1])
 
+# 思极坐标转换类
+class CoordinateInferenceConverter:
+    """
+    坐标转换推理工具类
+    
+    该类实现了加载已训练的模型，并支持两种方向的坐标转换：
+    1. 高德坐标到思极坐标
+    2. 思极坐标到高德坐标
+    支持从Excel文件读取数据并将转换结果保存到新的Excel文件中。
+    """
+    def __init__(self):
+        """初始化推理转换器实例"""
+        self.model = None  # 存储加载的模型
+        self.direction = None  # 转换方向
+        self.base_path = self._get_base_path()  # 获取程序基准路径
+
+    def _get_base_path(self):
+        """
+        获取程序的基准路径
+        
+        Returns:
+            str: 程序所在目录的绝对路径
+        """
+        if getattr(sys, 'frozen', False):
+            # 如果是打包后的可执行文件
+            return os.path.dirname(sys.executable)
+        else:
+            # 如果是Python脚本
+            return os.path.dirname(os.path.abspath(__file__))
+
+    def load_model(self, direction):
+        """
+        根据转换方向加载相应的已训练模型
+        
+        Args:
+            direction (str): 转换方向，'gaode_to_sj'或'sj_to_gaode'
+        
+        Returns:
+            bool: 加载成功返回True，否则返回False
+        """
+        self.direction = direction
+        
+        # 从model文件夹加载模型
+        if direction == 'gaode_to_sj':
+            model_path = os.path.join(self.base_path, 'model', 'gaode_to_sj_model.pkl')
+        elif direction == 'sj_to_gaode':
+            model_path = os.path.join(self.base_path, 'model', 'sj_to_gaode_model.pkl')
+        else:
+            print(f"错误: 不支持的转换方向 - {direction}")
+            return False
+
+        try:
+            if not os.path.exists(model_path):
+                print(f"错误: 模型文件不存在 - {model_path}")
+                print("请先使用sj.py脚本训练相应的模型")
+                return False
+
+            self.model = joblib.load(model_path)
+            print(f"成功加载{direction}模型: {model_path}")
+            return True
+        except Exception as e:
+            print(f"加载模型时出错: {str(e)}")
+            return False
+
+    def find_coordinate_columns(self, df):
+        """
+        根据转换方向智能识别相应的坐标列
+        
+        Args:
+            df (pd.DataFrame): 包含坐标数据的数据框
+        
+        Returns:
+            tuple: (lng_col, lat_col) 经度列名和纬度列名，如果未找到则返回(None, None)
+        """
+        if self.direction == 'gaode_to_sj':
+            # 定义高德坐标的关键词
+            keywords = ['高德', 'gcj02', 'gcj', '02']
+            column_type = '高德'
+        elif self.direction == 'sj_to_gaode':
+            # 定义思极坐标的关键词
+            keywords = ['思极', 'sj']
+            column_type = '思极'
+        else:
+            print("错误: 未设置转换方向")
+            return None, None
+
+        lng_keywords = ['经度', 'longitude', 'lng']
+        lat_keywords = ['纬度', 'latitude', 'lat']
+
+        # 查找经度列
+        lng_col = None
+        for col in df.columns:
+            col_lower = col.lower()
+            if any(keyword.lower() in col_lower for keyword in keywords) and \
+               any(lng_key in col_lower for lng_key in lng_keywords):
+                lng_col = col
+                break
+
+        # 查找纬度列
+        lat_col = None
+        for col in df.columns:
+            col_lower = col.lower()
+            if any(keyword.lower() in col_lower for keyword in keywords) and \
+               any(lat_key in col_lower for lat_key in lat_keywords):
+                lat_col = col
+                break
+
+        # 如果没有找到带关键词的列，尝试查找通用的经纬度列
+        if lng_col is None:
+            for col in df.columns:
+                col_lower = col.lower()
+                if any(lng_key in col_lower for lng_key in lng_keywords):
+                    lng_col = col
+                    break
+
+        if lat_col is None:
+            for col in df.columns:
+                col_lower = col.lower()
+                if any(lat_key in col_lower for lat_key in lat_keywords):
+                    lat_col = col
+                    break
+
+        if lng_col and lat_col:
+            print(f"识别到{column_type}坐标列: 经度='{lng_col}', 纬度='{lat_col}'")
+        else:
+            print(f"错误: 无法识别{column_type}经纬度列")
+
+        return lng_col, lat_col
+
+    def convert_coordinates(self, df, lng_col, lat_col):
+        """
+        批量转换坐标
+        
+        Args:
+            df (pd.DataFrame): 包含坐标数据的数据框
+            lng_col (str): 经度列名
+            lat_col (str): 纬度列名
+        
+        Returns:
+            pd.DataFrame: 包含转换结果的数据框，添加了目标坐标列
+        """
+        # 提取输入坐标
+        input_coords = df[[lng_col, lat_col]].values.astype(np.float64)
+
+        # 预测偏移量
+        offsets = self.model.predict(input_coords)
+
+        # 计算目标坐标
+        target_lng = input_coords[:, 0] + offsets[:, 0]
+        target_lat = input_coords[:, 1] + offsets[:, 1]
+
+        # 添加到数据框
+        if self.direction == 'gaode_to_sj':
+            df['思极经度'] = target_lng
+            df['思极纬度'] = target_lat
+        else:
+            df['高德经度'] = target_lng
+            df['高德纬度'] = target_lat
+
+        return df
+
 # 智能识别列名函数
 def find_column_by_keywords(df, type_keywords, coord_keyword):
     """
@@ -146,14 +314,15 @@ def find_column_by_keywords(df, type_keywords, coord_keyword):
     return None
 
 # 批量转换函数
-def batch_convert(input_file, output_file, convert_func, source_type, target_type):
+def batch_convert(input_file, output_file, convert_func, source_type, target_type, converter=None):
     """
     批量转换坐标
     :param input_file: 输入文件路径
     :param output_file: 输出文件路径
     :param convert_func: 转换函数
-    :param source_type: 源坐标系类型，如'WGS84'、'高德'或'百度'
-    :param target_type: 目标坐标系类型，如'WGS84'、'高德'或'百度'
+    :param source_type: 源坐标系类型，如'WGS84'、'高德'、'百度'或'思极'
+    :param target_type: 目标坐标系类型，如'WGS84'、'高德'、'百度'或'思极'
+    :param converter: 思极坐标转换器实例，仅在涉及思极坐标转换时使用
     """
     # 读取输入文件
     df = pd.read_excel(input_file, engine='openpyxl')
@@ -162,7 +331,8 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
     keywords_map = {
         'WGS84': ['WGS84', '84', 'wgs'],
         '高德': ['高德', 'GCJ02', 'gcj', '02'],
-        '百度': ['百度', 'BD09', 'bd', '09']
+        '百度': ['百度', 'BD09', 'bd', '09'],
+        '思极': ['思极', 'sj']
     }
     
     # 查找源坐标系的经纬度列
@@ -177,11 +347,16 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
     target_lat_col = f'纬度（{target_type}计算）'
     
     # 执行坐标转换
-    df[[target_lng_col, target_lat_col]] = df.apply(
-        lambda row: convert_func(row[source_lng_col], row[source_lat_col]),
-        axis=1,
-        result_type='expand'
-    )
+    if converter is not None:
+        # 使用思极转换器
+        df = converter.convert_coordinates(df, source_lng_col, source_lat_col)
+    else:
+        # 使用普通转换函数
+        df[[target_lng_col, target_lat_col]] = df.apply(
+            lambda row: convert_func(row[source_lng_col], row[source_lat_col]),
+            axis=1,
+            result_type='expand'
+        )
     
     # 找到纬度列的索引
     lat_index = df.columns.get_loc(source_lat_col)
@@ -192,7 +367,7 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
     new_columns = [col for i, col in enumerate(new_columns) if col not in new_columns[:i]]
     df = df[new_columns]
     
-    # 检查输出文件所在目录是否存在，如果不存在则创建
+    # 确保输出目录存在
     output_dir = os.path.dirname(output_file)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -231,13 +406,19 @@ def main():
         while True:
             print("请选择坐标转换模式：")
             print("1. WGS84 → 高德(GCJ-02)")
-            print("2. 高德(GCJ-02) → WGS84")
-            print("3. WGS84 → 百度(BD-09)")
-            print("4. 百度(BD-09) → WGS84")
-            print("5. 高德(GCJ-02) → 百度(BD-09)")
-            print("6. 百度(BD-09) → 高德(GCJ-02)")
-            mode = input("请选择(1-6): ")
-            if mode in ['1', '2', '3', '4', '5', '6']:
+            print("2. WGS84 → 百度(BD-09)")
+            print("3. WGS84 → 思极")
+            print("4. 思极 → 高德(GCJ-02)")
+            print("5. 思极 → 百度(BD-09)")
+            print("6. 思极 → WGS84")
+            print("7. 高德(GCJ-02) → WGS84")
+            print("8. 高德(GCJ-02) → 百度(BD-09)")
+            print("9. 高德(GCJ-02) → 思极")
+            print("10. 百度(BD-09) → WGS84")
+            print("11. 百度(BD-09) → 高德(GCJ-02)")
+            print("12. 百度(BD-09) → 思极")
+            mode = input("请选择(1-12): ")
+            if mode in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']:
                 break
             print("输入无效，请重新输入！")
         
@@ -276,40 +457,82 @@ def main():
                 'suffix': '-高德'
             },
             '2': {
-                'func': gcj02_to_wgs84,
-                'source': '高德',
-                'target': 'WGS84',
-                'suffix': '-WGS84'
-            },
-            '3': {
                 'func': wgs84_to_bd09,
                 'source': 'WGS84',
                 'target': '百度',
                 'suffix': '-百度'
             },
+            '3': {
+                'func': None,
+                'source': 'WGS84',
+                'target': '思极',
+                'suffix': '-思极',
+                'sj_direction': 'wgs84_to_sj'  # 注意：这里需要实际的转换方向，如果不存在该模型，需要调整
+            },
             '4': {
-                'func': bd09_to_wgs84,
-                'source': '百度',
+                'func': None,
+                'source': '思极',
+                'target': '高德',
+                'suffix': '-高德',
+                'sj_direction': 'sj_to_gaode'
+            },
+            '5': {
+                'func': None,
+                'source': '思极',
+                'target': '百度',
+                'suffix': '-百度',
+                'sj_direction': 'sj_to_gaode'  # 思极→百度需要先转高德再转百度
+            },
+            '6': {
+                'func': None,
+                'source': '思极',
+                'target': 'WGS84',
+                'suffix': '-WGS84',
+                'sj_direction': 'sj_to_gaode'  # 思极→WGS84需要先转高德再转WGS84
+            },
+            '7': {
+                'func': gcj02_to_wgs84,
+                'source': '高德',
                 'target': 'WGS84',
                 'suffix': '-WGS84'
             },
-            '5': {
+            '8': {
                 'func': gcj02_to_bd09,
                 'source': '高德',
                 'target': '百度',
                 'suffix': '-百度'
             },
-            '6': {
+            '9': {
+                'func': None,
+                'source': '高德',
+                'target': '思极',
+                'suffix': '-思极',
+                'sj_direction': 'gaode_to_sj'
+            },
+            '10': {
+                'func': bd09_to_wgs84,
+                'source': '百度',
+                'target': 'WGS84',
+                'suffix': '-WGS84'
+            },
+            '11': {
                 'func': bd09_to_gcj02,
                 'source': '百度',
                 'target': '高德',
                 'suffix': '-高德'
+            },
+            '12': {
+                'func': None,
+                'source': '百度',
+                'target': '思极',
+                'suffix': '-思极',
+                'sj_direction': 'gaode_to_sj'  # 百度→思极需要先转高德再转思极
             }
         }
         
         params = conversion_params[mode]
         output_filename = f"{filename_without_ext}{params['suffix']}.xlsx"
-        output_file = os.path.join(base_path, output_filename)
+        output_file = os.path.join(base_path, 'run', output_filename)  # 保存到run文件夹
         
         # 记录日志
         logging.debug(f"转换模式: {params['source']}转{params['target']}")
@@ -320,7 +543,134 @@ def main():
         print(f"转换模式: {params['source']}转{params['target']}")
         
         # 执行转换
-        batch_convert(input_file, output_file, params['func'], params['source'], params['target'])
+        converter = None
+        if params.get('sj_direction'):
+            # 涉及思极坐标转换
+            converter = CoordinateInferenceConverter()
+            # 对于需要多步转换的情况
+            if mode == '3':  # WGS84 → 思极: 需要先转高德再转思极
+                print("WGS84转思极需要先将WGS84转为高德，再将高德转为思极")
+                # 先进行WGS84到高德的转换
+                temp_df = pd.read_excel(input_file, engine='openpyxl')
+                temp_df[['高德经度', '高德纬度']] = temp_df.apply(
+                    lambda row: wgs84_to_gcj02(row[find_column_by_keywords(temp_df, ['WGS84', '84', 'wgs'], '经度')], 
+                                             row[find_column_by_keywords(temp_df, ['WGS84', '84', 'wgs'], '纬度')]),
+                    axis=1,
+                    result_type='expand'
+                )
+                # 保存临时结果
+                temp_file = os.path.join(base_path, 'run', f"{filename_without_ext}-temp.xlsx")
+                temp_df.to_excel(temp_file, index=False, engine='openpyxl')
+                # 加载高德到思极的模型
+                if not converter.load_model('gaode_to_sj'):
+                    print("无法加载模型，程序退出")
+                    return
+                # 使用临时文件作为输入
+                input_file = temp_file
+            elif mode == '5':  # 思极 → 百度: 需要先转高德再转百度
+                print("思极转百度需要先将思极转为高德，再将高德转为百度")
+                # 加载思极到高德的模型
+                if not converter.load_model('sj_to_gaode'):
+                    print("无法加载模型，程序退出")
+                    return
+                # 先进行思极到高德的转换
+                temp_df = pd.read_excel(input_file, engine='openpyxl')
+                # 识别思极坐标列
+                sj_lng_col, sj_lat_col = find_column_by_keywords(temp_df, ['思极', 'sj'], '经度'), find_column_by_keywords(temp_df, ['思极', 'sj'], '纬度')
+                if sj_lng_col is None or sj_lat_col is None:
+                    raise ValueError("无法找到思极经纬度列")
+                # 提取输入坐标
+                input_coords = temp_df[[sj_lng_col, sj_lat_col]].values.astype(np.float64)
+                # 预测偏移量
+                offsets = converter.model.predict(input_coords)
+                # 计算目标坐标
+                target_lng = input_coords[:, 0] + offsets[:, 0]
+                target_lat = input_coords[:, 1] + offsets[:, 1]
+                # 添加到数据框
+                temp_df['高德经度'] = target_lng
+                temp_df['高德纬度'] = target_lat
+                # 保存临时结果
+                temp_file = os.path.join(base_path, 'run', f"{filename_without_ext}-temp.xlsx")
+                temp_df.to_excel(temp_file, index=False, engine='openpyxl')
+                # 使用临时文件作为输入
+                input_file = temp_file
+                # 执行高德到百度的转换
+                batch_convert(input_file, output_file, gcj02_to_bd09, '高德', '百度')
+                # 删除临时文件
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+                print(f"坐标转换完成！")
+                print(f"结果已保存到: {output_filename}")
+                input("\n按回车键退出...")
+                return
+            elif mode == '6':  # 思极 → WGS84: 需要先转高德再转WGS84
+                print("思极转WGS84需要先将思极转为高德，再将高德转为WGS84")
+                # 加载思极到高德的模型
+                if not converter.load_model('sj_to_gaode'):
+                    print("无法加载模型，程序退出")
+                    return
+                # 先进行思极到高德的转换
+                temp_df = pd.read_excel(input_file, engine='openpyxl')
+                # 识别思极坐标列
+                sj_lng_col, sj_lat_col = find_column_by_keywords(temp_df, ['思极', 'sj'], '经度'), find_column_by_keywords(temp_df, ['思极', 'sj'], '纬度')
+                if sj_lng_col is None or sj_lat_col is None:
+                    raise ValueError("无法找到思极经纬度列")
+                # 提取输入坐标
+                input_coords = temp_df[[sj_lng_col, sj_lat_col]].values.astype(np.float64)
+                # 预测偏移量
+                offsets = converter.model.predict(input_coords)
+                # 计算目标坐标
+                target_lng = input_coords[:, 0] + offsets[:, 0]
+                target_lat = input_coords[:, 1] + offsets[:, 1]
+                # 添加到数据框
+                temp_df['高德经度'] = target_lng
+                temp_df['高德纬度'] = target_lat
+                # 保存临时结果
+                temp_file = os.path.join(base_path, 'run', f"{filename_without_ext}-temp.xlsx")
+                temp_df.to_excel(temp_file, index=False, engine='openpyxl')
+                # 使用临时文件作为输入
+                input_file = temp_file
+                # 执行高德到WGS84的转换
+                batch_convert(input_file, output_file, gcj02_to_wgs84, '高德', 'WGS84')
+                # 删除临时文件
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+                print(f"坐标转换完成！")
+                print(f"结果已保存到: {output_filename}")
+                input("\n按回车键退出...")
+                return
+            elif mode == '12':  # 百度 → 思极: 需要先转高德再转思极
+                print("百度转思极需要先将百度转为高德，再将高德转为思极")
+                # 先进行百度到高德的转换
+                temp_df = pd.read_excel(input_file, engine='openpyxl')
+                temp_df[['高德经度', '高德纬度']] = temp_df.apply(
+                    lambda row: bd09_to_gcj02(row[find_column_by_keywords(temp_df, ['百度', 'BD09', 'bd', '09'], '经度')], 
+                                             row[find_column_by_keywords(temp_df, ['百度', 'BD09', 'bd', '09'], '纬度')]),
+                    axis=1,
+                    result_type='expand'
+                )
+                # 保存临时结果
+                temp_file = os.path.join(base_path, 'run', f"{filename_without_ext}-temp.xlsx")
+                temp_df.to_excel(temp_file, index=False, engine='openpyxl')
+                # 加载高德到思极的模型
+                if not converter.load_model('gaode_to_sj'):
+                    print("无法加载模型，程序退出")
+                    return
+                # 使用临时文件作为输入
+                input_file = temp_file
+            else:
+                # 直接加载对应的模型
+                if not converter.load_model(params['sj_direction']):
+                    print("无法加载模型，程序退出")
+                    return
+            # 执行思极相关转换
+            batch_convert(input_file, output_file, None, params['source'], params['target'], converter)
+            # 如果有临时文件，删除它
+            if 'temp_file' in locals() and os.path.exists(temp_file):
+                os.remove(temp_file)
+        else:
+            # 执行普通转换
+            batch_convert(input_file, output_file, params['func'], params['source'], params['target'])
         
         print(f"坐标转换完成！")
         print(f"结果已保存到: {output_filename}")
@@ -334,6 +684,7 @@ def main():
         print("- WGS84坐标：包含'WGS84'、'84'等关键词的经度和纬度列")
         print("- 高德坐标：包含'高德'、'GCJ02'等关键词的经度和纬度列")
         print("- 百度坐标：包含'百度'、'BD09'等关键词的经度和纬度列")
+        print("- 思极坐标：包含'思极'、'sj'等关键词的经度和纬度列")
     except Exception as e:
         # 处理其他错误
         error_msg = f"处理过程中出错: {str(e)}"
