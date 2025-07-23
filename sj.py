@@ -16,20 +16,23 @@ plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 class SJCoordinateConverter:
     """
-    高德坐标系到思极坐标系转换模型
+    坐标转换模型类
     
-    该类实现了基于机器学习的坐标转换，通过已知的高德和思极坐标对训练模型，
-    然后使用模型预测新的坐标转换关系。支持随机森林和XGBoost两种算法。
+    该类实现了基于机器学习的坐标转换，支持以下两种转换方向：
+    1. 高德坐标系到思极坐标系
+    2. 思极坐标系到高德坐标系
+    通过已知的坐标对训练模型，然后使用模型预测新的坐标转换关系。
+    支持随机森林和XGBoost两种算法。
     """
     def __init__(self):
         """初始化转换器实例"""
-        self.model_lng = None  # 经度模型
-        self.model_lat = None  # 纬度模型
+        self.model = None      # 转换模型
         self.X_train = None    # 训练特征数据
         self.X_test = None     # 测试特征数据
         self.y_train = None    # 训练目标数据
         self.y_test = None     # 测试目标数据
         self.y_pred = None     # 预测结果
+        self.direction = None  # 转换方向: 'gaode_to_sj' 或 'sj_to_gaode'
 
     def load_data(self, file_path="坐标数据.xlsx"):
         """
@@ -58,26 +61,42 @@ class SJCoordinateConverter:
             print(f"加载数据时出错: {e}")
             raise
 
-    def prepare_data(self, df, test_size=0.2, random_state=42):
+    def prepare_data(self, df, direction='gaode_to_sj', test_size=0.2, random_state=42):
         """
         准备训练数据和测试数据
         
-        将高德坐标作为特征，思极坐标与高德坐标的偏移量作为目标值
+        根据指定的转换方向，选择相应的特征和目标值
         
         Args:
             df (pd.DataFrame): 包含坐标数据的数据框
+            direction (str): 转换方向，可选'gaode_to_sj'（高德到思极）或'sj_to_gaode'（思极到高德）
             test_size (float): 测试集比例，默认为0.2
             random_state (int): 随机种子，保证结果可复现
         
         Returns:
             tuple: (X_train, X_test, y_train, y_test) 训练和测试数据
+        
+        Raises:
+            ValueError: 当指定了不支持的转换方向时
         """
-        # 特征：高德经纬度
-        X = df[["高德经度", "高德纬度"]].values.astype(np.float64)
-        # 目标：思极经纬度偏移量（而不是直接预测思极坐标）
-        df["经度偏移"] = df["思极经度"] - df["高德经度"]
-        df["纬度偏移"] = df["思极纬度"] - df["高德纬度"]
-        y = df[["经度偏移", "纬度偏移"]].values.astype(np.float64)
+        self.direction = direction
+        
+        if direction == 'gaode_to_sj':
+            # 特征：高德经纬度
+            X = df[["高德经度", "高德纬度"]].values.astype(np.float64)
+            # 目标：思极经纬度偏移量
+            df["经度偏移"] = df["思极经度"] - df["高德经度"]
+            df["纬度偏移"] = df["思极纬度"] - df["高德纬度"]
+            y = df[["经度偏移", "纬度偏移"]].values.astype(np.float64)
+        elif direction == 'sj_to_gaode':
+            # 特征：思极经纬度
+            X = df[["思极经度", "思极纬度"]].values.astype(np.float64)
+            # 目标：高德经纬度偏移量
+            df["经度偏移"] = df["高德经度"] - df["思极经度"]
+            df["纬度偏移"] = df["高德纬度"] - df["思极纬度"]
+            y = df[["经度偏移", "纬度偏移"]].values.astype(np.float64)
+        else:
+            raise ValueError(f"不支持的转换方向: {direction}，请使用'gaode_to_sj'或'sj_to_gaode'")
 
         # 划分训练集和测试集
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
@@ -120,14 +139,22 @@ class SJCoordinateConverter:
         print("模型训练完成")
         return model
 
-    def save_model(self, model, model_path="coordinate_model.pkl"):
+    def save_model(self, model, model_path=None):
         """
         保存训练好的模型到文件
         
         Args:
             model: 训练好的模型
-            model_path (str): 模型保存路径，默认为"coordinate_model.pkl"
+            model_path (str, optional): 模型保存路径，如果为None则根据转换方向自动生成
         """
+        if model_path is None:
+            if self.direction == 'gaode_to_sj':
+                model_path = 'gaode_to_sj_model.pkl'
+            elif self.direction == 'sj_to_gaode':
+                model_path = 'sj_to_gaode_model.pkl'
+            else:
+                model_path = 'coordinate_model.pkl'
+                
         joblib.dump(model, model_path)
         print(f"模型已保存到: {os.path.abspath(model_path)}")
 
@@ -235,30 +262,47 @@ class SJCoordinateConverter:
         print("误差可视化完成，已保存为'误差分析.png'")
         plt.show()
 
-    def convert(self, model, gaode_lng, gaode_lat):
+    def convert(self, model, input_lng, input_lat, direction=None):
         """
-        将高德坐标转换为思极坐标
+        坐标转换
+        
+        根据指定的转换方向，将输入坐标转换为目标坐标
         
         Args:
             model: 训练好的模型
-            gaode_lng (float): 高德坐标系经度
-            gaode_lat (float): 高德坐标系纬度
+            input_lng (float): 输入坐标系经度
+            input_lat (float): 输入坐标系纬度
+            direction (str, optional): 转换方向，如果为None则使用训练时的方向
         
         Returns:
-            tuple: (sj_lng, sj_lat) 思极坐标系的经度和纬度
+            tuple: (target_lng, target_lat) 目标坐标系的经度和纬度
+        
+        Raises:
+            ValueError: 当未指定转换方向且训练时也未设置时
         """
+        # 确定转换方向
+        convert_direction = direction or self.direction
+        if convert_direction is None:
+            raise ValueError("未指定转换方向，请提供direction参数或先调用prepare_data方法")
+
         # 确保输入是浮点数
-        gaode_lng = float(gaode_lng)
-        gaode_lat = float(gaode_lat)
+        input_lng = float(input_lng)
+        input_lat = float(input_lat)
 
         # 预测偏移量
-        offset = model.predict(np.array([[gaode_lng, gaode_lat]]))[0]
+        offset = model.predict(np.array([[input_lng, input_lat]]))[0]
 
-        # 计算思极坐标
-        sj_lng = gaode_lng + offset[0]
-        sj_lat = gaode_lat + offset[1]
+        # 根据转换方向计算目标坐标
+        if convert_direction == 'gaode_to_sj':
+            target_lng = input_lng + offset[0]
+            target_lat = input_lat + offset[1]
+        elif convert_direction == 'sj_to_gaode':
+            target_lng = input_lng + offset[0]
+            target_lat = input_lat + offset[1]
+        else:
+            raise ValueError(f"不支持的转换方向: {convert_direction}")
 
-        return sj_lng, sj_lat
+        return target_lng, target_lat
 
     def test_conversion(self, model, sample_size=10):
         """
@@ -301,8 +345,22 @@ if __name__ == "__main__":
         # 加载数据
         df = converter.load_data()
 
+        # 询问用户想要训练的转换方向
+        print("请选择要训练的转换方向：")
+        print("1. 高德坐标到思极坐标 (gaode_to_sj)")
+        print("2. 思极坐标到高德坐标 (sj_to_gaode)")
+        choice = input("请输入选择 (1/2): ")
+        
+        if choice == '1':
+            direction = 'gaode_to_sj'
+        elif choice == '2':
+            direction = 'sj_to_gaode'
+        else:
+            print("无效的选择，默认使用高德坐标到思极坐标")
+            direction = 'gaode_to_sj'
+
         # 准备数据
-        converter.prepare_data(df)
+        converter.prepare_data(df, direction=direction)
 
         # 训练模型 - 可以尝试"random_forest"或"xgboost"
         model = converter.train_model(model_type="xgboost")
@@ -319,9 +377,12 @@ if __name__ == "__main__":
         # 测试转换
         converter.test_conversion(model)
 
-        print("\n坐标转换模型已成功训练和测试。")
-        print("您可以使用converter.convert(model, gaode_lng, gaode_lat)函数进行坐标转换。")
-        print("模型已保存到当前目录下的'coordinate_model.pkl'文件。")
+        print(f"\n{direction}转换模型已成功训练和测试。")
+        if direction == 'gaode_to_sj':
+            print("您可以使用converter.convert(model, gaode_lng, gaode_lat)函数进行坐标转换。")
+        else:
+            print("您可以使用converter.convert(model, sj_lng, sj_lat)函数进行坐标转换。")
+        print(f"模型已保存到当前目录下的'{direction}_model.pkl'文件。")
 
     except Exception as e:
         print(f"程序执行出错: {e}")
