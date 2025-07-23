@@ -342,15 +342,21 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
     if source_lng_col is None or source_lat_col is None:
         raise ValueError(f"无法找到{source_type}经纬度列，请确保Excel文件包含经度和纬度列")
     
-    # 输出列名
-    target_lng_col = f'经度（{target_type}计算）'
-    target_lat_col = f'纬度（{target_type}计算）'
-    
     # 执行坐标转换
     if converter is not None:
         # 使用思极转换器
         df = converter.convert_coordinates(df, source_lng_col, source_lat_col)
+        # 确定思极转换生成的列名
+        if target_type == '思极':
+            target_lng_col = '思极经度'
+            target_lat_col = '思极纬度'
+        else:
+            target_lng_col = '高德经度'
+            target_lat_col = '高德纬度'
     else:
+        # 输出列名
+        target_lng_col = f'经度（{target_type}计算）'
+        target_lat_col = f'纬度（{target_type}计算）'
         # 使用普通转换函数
         df[[target_lng_col, target_lat_col]] = df.apply(
             lambda row: convert_func(row[source_lng_col], row[source_lat_col]),
