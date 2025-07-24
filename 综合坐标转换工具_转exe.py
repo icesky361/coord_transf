@@ -5,8 +5,11 @@ import math
 import re
 import joblib
 import numpy as np
+import logging
 
 # 确保中文显示正常
+import matplotlib
+matplotlib.use('Agg')  # 非交互式后端，避免GUI问题
 import matplotlib.pyplot as plt
 plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC"]
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
@@ -145,6 +148,18 @@ class CoordinateInferenceConverter:
         self.model = None  # 存储加载的模型
         self.direction = None  # 转换方向
         self.base_path = self._get_base_path()  # 获取程序基准路径
+        self._setup_logging()
+
+    def _setup_logging(self):
+        """设置详细日志"""
+        log_file = os.path.join(self.base_path, 'converter.log')
+        logging.basicConfig(
+            filename=log_file,
+            level=logging.DEBUG,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        self.logger = logging.getLogger('CoordinateConverter')
+        self.logger.info(f"日志已设置，保存路径: {log_file}")
 
     def _get_base_path(self):
         """
@@ -155,9 +170,11 @@ class CoordinateInferenceConverter:
         """
         if getattr(sys, 'frozen', False):
             # 如果是打包后的可执行文件
+            self.logger.info(f"运行在打包模式下，executable路径: {sys.executable}")
             return os.path.dirname(sys.executable)
         else:
             # 如果是Python脚本
+            self.logger.info(f"运行在脚本模式下，文件路径: {__file__}")
             return os.path.dirname(os.path.abspath(__file__))
 
     def load_model(self, direction):
@@ -171,6 +188,7 @@ class CoordinateInferenceConverter:
             bool: 加载成功返回True，否则返回False
         """
         self.direction = direction
+        self.logger.info(f"尝试加载模型，方向: {direction}")
         
         # 从model文件夹加载模型
         if direction == 'gaode_to_sj':
@@ -178,20 +196,28 @@ class CoordinateInferenceConverter:
         elif direction == 'sj_to_gaode':
             model_path = os.path.join(self.base_path, 'model', 'sj_to_gaode_model.pkl')
         else:
-            print(f"错误: 不支持的转换方向 - {direction}")
+            error_msg = f"不支持的转换方向 - {direction}"
+            self.logger.error(error_msg)
+            print(f"错误: {error_msg}")
             return False
 
         try:
+            self.logger.info(f"模型路径: {model_path}")
             if not os.path.exists(model_path):
-                print(f"错误: 模型文件不存在 - {model_path}")
+                error_msg = f"模型文件不存在 - {model_path}"
+                self.logger.error(error_msg)
+                print(f"错误: {error_msg}")
                 print("请先使用sj.py脚本训练相应的模型")
                 return False
 
             self.model = joblib.load(model_path)
+            self.logger.info(f"成功加载{direction}模型")
             print(f"成功加载{direction}模型: {model_path}")
             return True
         except Exception as e:
-            print(f"加载模型时出错: {str(e)}")
+            error_msg = f"加载模型时出错: {str(e)}"
+            self.logger.error(error_msg, exc_info=True)
+            print(error_msg)
             return False
 
     def find_coordinate_columns(self, df):
@@ -398,14 +424,21 @@ else:
     # 如果是Python脚本
     base_path = os.path.dirname(os.path.abspath(__file__))
 
-# 配置日志记录
-import logging
-logging.basicConfig(filename=os.path.join(base_path, 'app.log'), level=logging.DEBUG)
+# 配置详细日志记录
+log_file = os.path.join(base_path, 'app.log')
+logging.basicConfig(
+    filename=log_file,
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('MainApp')
+logger.info(f"应用启动，基础路径: {base_path}")
 
 # 主函数
 def main():
     print("综合坐标转换工具")
     print("=" * 30)
+    logger.info("应用启动")
     
     try:
         # 提示用户选择转换模式
@@ -563,11 +596,14 @@ def main():
                 if converter.load_model('gaode_to_sj'):
                     batch_convert(temp_file, output_file, None, '高德', '思极', converter)
                     print(f"转换完成！结果已保存到: {output_file}")
+                    logger.info(f"转换完成，输出文件: {output_file}")
                     # 删除临时文件
                     if os.path.exists(temp_file):
                         os.remove(temp_file)
+                        logger.info(f"删除临时文件: {temp_file}")
                 else:
                     print("转换失败！")
+                    logger.error("转换失败，模型加载失败")
             elif mode == '5':  # 思极 → 百度: 需要先转高德再转百度
                 print("思极转百度需要先将思极转为高德，再将高德转为百度...")
                 if converter.load_model('sj_to_gaode'):
@@ -621,10 +657,12 @@ def main():
             # 直接转换
             batch_convert(input_file, output_file, params['func'], params['source'], params['target'])
             print(f"转换完成！结果已保存到: {output_file}")
+            logger.info(f"转换完成，输出文件: {output_file}")
         
     except Exception as e:
-        logging.error(f"程序运行出错: {str(e)}")
-        print(f"程序运行出错: {str(e)}")
+        error_msg = f"程序运行出错: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        print(error_msg)
         input("按Enter键退出...")
 
 if __name__ == "__main__":

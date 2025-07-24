@@ -2,12 +2,11 @@ import os
 import sys
 import pandas as pd
 import math
-import re
 import joblib
 import numpy as np
-
-# 确保中文显示正常
 import matplotlib.pyplot as plt
+# 确保中文显示正常
+
 plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC"]
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
