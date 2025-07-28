@@ -341,6 +341,29 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
     if source_lng_col is None or source_lat_col is None:
         raise ValueError(f"无法找到{source_type}经纬度列，请确保Excel文件包含经度和纬度列")
     
+    # 坐标合理性校验
+    china_lng_min, china_lng_max = 73.66, 135.05
+    china_lat_min, china_lat_max = 3.86, 53.55
+    out_of_range = []
+    
+    for idx, row in df.iterrows():
+        try:
+            lng = float(row[source_lng_col])
+            lat = float(row[source_lat_col])
+            if not (china_lng_min <= lng <= china_lng_max and china_lat_min <= lat <= china_lat_max):
+                out_of_range.append((idx + 2, lng, lat))  # +2是因为Excel行号从1开始，且表头占一行
+        except ValueError:
+            out_of_range.append((idx + 2, row[source_lng_col], row[source_lat_col]))
+    
+    if out_of_range:
+        print(f"\n警告：发现以下坐标超出中国地区经纬度范围（经度: {china_lng_min}°~{china_lng_max}°，纬度: {china_lat_min}°~{china_lat_max}°）：")
+        print("行号\t经度\t纬度")
+        for row_num, lng, lat in out_of_range:
+            print(f"{row_num}\t{lng}\t{lat}")
+        print("\n请检查并修改表格中的这些数值，确保它们在上述范围内。")
+    else:
+        print("\n所有坐标均在合理范围内。")
+    
     # 执行坐标转换
     if converter is not None:
         # 使用思极转换器
