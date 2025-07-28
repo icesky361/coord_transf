@@ -266,6 +266,19 @@ class CoordinateInferenceConverter:
 CHINA_LNG_MIN, CHINA_LNG_MAX = 73.66, 135.05
 CHINA_LAT_MIN, CHINA_LAT_MAX = 3.86, 53.55
 
+# 用户确认继续函数
+def confirm_continue(prompt):
+    """
+    提示用户确认是否继续操作
+    :param prompt: 提示信息字符串
+    :return: 布尔值（True表示继续，False表示终止）
+    """
+    while True:
+        choice = input(prompt).strip().lower()
+        if choice in ['y', 'n']:
+            return choice == 'y'
+        print("输入无效，请输入'y'或'n'。")
+
 # 坐标范围校验函数
 def check_coordinates_in_range(df, lng_col, lat_col):
     """
