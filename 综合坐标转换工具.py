@@ -351,17 +351,17 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
             lng = float(row[source_lng_col])
             lat = float(row[source_lat_col])
             if not (china_lng_min <= lng <= china_lng_max and china_lat_min <= lat <= china_lat_max):
-                out_of_range.append((idx + 2, lng, lat))  # +2是因为Excel行号从1开始，且表头占一行
+                out_of_range.append((idx, idx + 2, lng, lat))  # 存储DataFrame索引和Excel行号
         except ValueError:
-            out_of_range.append((idx + 2, row[source_lng_col], row[source_lat_col]))
+            out_of_range.append((idx, idx + 2, row[source_lng_col], row[source_lat_col]))
     
     # 创建超出范围的行索引集合
-    out_of_range_indices = {idx for idx, _, _ in out_of_range}
+    out_of_range_indices = {idx for idx, _, _, _ in out_of_range}
     
     if out_of_range:
         print(f"\n警告：发现以下坐标超出中国地区经纬度范围（经度: {china_lng_min}°~{china_lng_max}°，纬度: {china_lat_min}°~{china_lat_max}°）：")
         print("行号\t经度\t纬度")
-        for row_num, lng, lat in out_of_range:
+        for _, row_num, lng, lat in out_of_range:
             print(f"{row_num}\t{lng}\t{lat}")
         
         # 询问用户是否继续转换
