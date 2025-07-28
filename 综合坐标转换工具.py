@@ -382,7 +382,7 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
     # 执行坐标转换
     if converter is not None:
         # 使用思极转换器，并处理超出范围的坐标
-3        # 确定思极转换生成的列名
+        # 确定思极转换生成的列名
         if target_type == '思极':
             target_lng_col = '思极经度'
             target_lat_col = '思极纬度'
