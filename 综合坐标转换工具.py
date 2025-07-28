@@ -550,7 +550,7 @@ def main():
                 'source': 'WGS84',
                 'target': '思极',
                 'suffix': '-思极',
-                'sj_direction': 'wgs84_to_sj'  # 注意：这里需要实际的转换方向，如果不存在该模型，需要调整
+                'sj_direction': 'gaode_to_sj'  # WGS84→思极需要先转高德再转思极
             },
             '4': {
                 'func': None,
@@ -635,7 +635,7 @@ def main():
                 print("WGS84转思极需要先将WGS84转为高德，再将高德转为思极")
                 # 先进行WGS84到高德的转换
                 temp_df = pd.read_excel(input_file, engine='openpyxl')
-                temp_df[['高德经度', '高德纬度']] = temp_df.apply(
+                temp_df[['高德经度（第一步辅助转换）', '高德纬度（第一步辅助转换）']] = temp_df.apply(
                     lambda row: wgs84_to_gcj02(row[find_column_by_keywords(temp_df, ['WGS84', '84', 'wgs'], '经度')], 
                                              row[find_column_by_keywords(temp_df, ['WGS84', '84', 'wgs'], '纬度')]),
                     axis=1,
@@ -670,8 +670,8 @@ def main():
                 target_lng = input_coords[:, 0] + offsets[:, 0]
                 target_lat = input_coords[:, 1] + offsets[:, 1]
                 # 添加到数据框
-                temp_df['高德经度'] = target_lng
-                temp_df['高德纬度'] = target_lat
+                temp_df['高德经度（第一步辅助转换）'] = target_lng
+                temp_df['高德纬度（第一步辅助转换）'] = target_lat
                 # 保存临时结果
                 temp_file = os.path.join(base_path, 'run', f"{filename_without_ext}-temp.xlsx")
                 temp_df.to_excel(temp_file, index=False, engine='openpyxl')
@@ -706,8 +706,8 @@ def main():
                 target_lng = input_coords[:, 0] + offsets[:, 0]
                 target_lat = input_coords[:, 1] + offsets[:, 1]
                 # 添加到数据框
-                temp_df['高德经度'] = target_lng
-                temp_df['高德纬度'] = target_lat
+                temp_df['高德经度（第一步辅助转换）'] = target_lng
+                temp_df['高德纬度（第一步辅助转换）'] = target_lat
                 # 保存临时结果
                 temp_file = os.path.join(base_path, 'run', f"{filename_without_ext}-temp.xlsx")
                 temp_df.to_excel(temp_file, index=False, engine='openpyxl')
@@ -726,7 +726,7 @@ def main():
                 print("百度转思极需要先将百度转为高德，再将高德转为思极")
                 # 先进行百度到高德的转换
                 temp_df = pd.read_excel(input_file, engine='openpyxl')
-                temp_df[['高德经度', '高德纬度']] = temp_df.apply(
+                temp_df[['高德经度（第一步辅助转换）', '高德纬度（第一步辅助转换）']] = temp_df.apply(
                     lambda row: bd09_to_gcj02(row[find_column_by_keywords(temp_df, ['百度', 'BD09', 'bd', '09'], '经度')], 
                                              row[find_column_by_keywords(temp_df, ['百度', 'BD09', 'bd', '09'], '纬度')]),
                     axis=1,
