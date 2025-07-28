@@ -421,7 +421,7 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
                     try:
                         lng = float(df.at[idx, source_lng_col])
                         lat = float(df.at[idx, source_lat_col])
-                        if china_lng_min <= lng <= china_lng_max and china_lat_min <= lat <= china_lat_max:
+                        if CHINA_LNG_MIN <= lng <= CHINA_LNG_MAX and CHINA_LAT_MIN <= lat <= CHINA_LAT_MAX:
                             converted_lng, converted_lat = convert_func(lng, lat)
                             df.at[idx, target_lng_col] = converted_lng
                             df.at[idx, target_lat_col] = converted_lat
