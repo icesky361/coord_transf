@@ -382,19 +382,19 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
     # 执行坐标转换
     if converter is not None:
         # 使用思极转换器，并处理超出范围的坐标
+3        # 确定思极转换生成的列名
+        if target_type == '思极':
+            target_lng_col = '思极经度'
+            target_lat_col = '思极纬度'
+        else:
+            target_lng_col = '高德经度'
+            target_lat_col = '高德纬度'
+        
         if out_of_range_indices:
             # 先创建一个副本，避免修改原始数据
             temp_df = df.copy()
             # 对所有行执行转换
             temp_df = converter.convert_coordinates(temp_df, source_lng_col, source_lat_col)
-            
-            # 确定思极转换生成的列名
-            if target_type == '思极':
-                target_lng_col = '思极经度'
-                target_lat_col = '思极纬度'
-            else:
-                target_lng_col = '高德经度'
-                target_lat_col = '高德纬度'
             
             # 对超出范围的行进行标记
             for idx in out_of_range_indices:
