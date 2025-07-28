@@ -355,36 +355,91 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
         except ValueError:
             out_of_range.append((idx + 2, row[source_lng_col], row[source_lat_col]))
     
+    # 创建超出范围的行索引集合
+    out_of_range_indices = {idx for idx, _, _ in out_of_range}
+    
     if out_of_range:
         print(f"\n警告：发现以下坐标超出中国地区经纬度范围（经度: {china_lng_min}°~{china_lng_max}°，纬度: {china_lat_min}°~{china_lat_max}°）：")
         print("行号\t经度\t纬度")
         for row_num, lng, lat in out_of_range:
             print(f"{row_num}\t{lng}\t{lat}")
-        print("\n请检查并修改表格中的这些数值，确保它们在上述范围内。")
+        
+        # 询问用户是否继续转换
+        while True:
+            choice = input("\n是否继续转换？(y/n): ").strip().lower()
+            if choice in ['y', 'n']:
+                break
+            print("输入无效，请输入'y'或'n'。")
+        
+        if choice == 'n':
+            print("程序已终止，未执行坐标转换。")
+            return
+        else:
+            print("将继续转换，超出范围的坐标将标记为'原坐标不在合理范围'。")
     else:
         print("\n所有坐标均在合理范围内。")
     
     # 执行坐标转换
     if converter is not None:
-        # 使用思极转换器
-        df = converter.convert_coordinates(df, source_lng_col, source_lat_col)
-        # 确定思极转换生成的列名
-        if target_type == '思极':
-            target_lng_col = '思极经度'
-            target_lat_col = '思极纬度'
+        # 使用思极转换器，并处理超出范围的坐标
+        if out_of_range_indices:
+            # 先创建一个副本，避免修改原始数据
+            temp_df = df.copy()
+            # 对所有行执行转换
+            temp_df = converter.convert_coordinates(temp_df, source_lng_col, source_lat_col)
+            
+            # 确定思极转换生成的列名
+            if target_type == '思极':
+                target_lng_col = '思极经度'
+                target_lat_col = '思极纬度'
+            else:
+                target_lng_col = '高德经度'
+                target_lat_col = '高德纬度'
+            
+            # 对超出范围的行进行标记
+            for idx in out_of_range_indices:
+                if idx < len(df):
+                    df.at[idx, target_lng_col] = '原坐标不在合理范围'
+                    df.at[idx, target_lat_col] = '原坐标不在合理范围'
+            
+            # 对范围内的行复制转换结果
+            for idx in range(len(df)):
+                if idx not in out_of_range_indices:
+                    df.at[idx, target_lng_col] = temp_df.at[idx, target_lng_col]
+                    df.at[idx, target_lat_col] = temp_df.at[idx, target_lat_col]
         else:
-            target_lng_col = '高德经度'
-            target_lat_col = '高德纬度'
+            # 所有坐标都在范围内，直接转换
+            df = converter.convert_coordinates(df, source_lng_col, source_lat_col)
+
     else:
         # 输出列名
         target_lng_col = f'经度（{target_type}计算）'
         target_lat_col = f'纬度（{target_type}计算）'
-        # 使用普通转换函数
-        df[[target_lng_col, target_lat_col]] = df.apply(
-            lambda row: convert_func(row[source_lng_col], row[source_lat_col]),
-            axis=1,
-            result_type='expand'
-        )
+        # 使用普通转换函数，并处理超出范围的坐标
+        if out_of_range_indices:
+            # 创建目标列并初始化为'原坐标不在合理范围'
+            df[target_lng_col] = '原坐标不在合理范围'
+            df[target_lat_col] = '原坐标不在合理范围'
+            
+            # 只对范围内的行应用转换函数
+            for idx in range(len(df)):
+                if idx not in out_of_range_indices:
+                    try:
+                        lng = float(df.at[idx, source_lng_col])
+                        lat = float(df.at[idx, source_lat_col])
+                        if china_lng_min <= lng <= china_lng_max and china_lat_min <= lat <= china_lat_max:
+                            converted_lng, converted_lat = convert_func(lng, lat)
+                            df.at[idx, target_lng_col] = converted_lng
+                            df.at[idx, target_lat_col] = converted_lat
+                    except ValueError:
+                        pass  # 保持标记不变
+        else:
+            # 所有坐标都在范围内，直接转换
+            df[[target_lng_col, target_lat_col]] = df.apply(
+                lambda row: convert_func(row[source_lng_col], row[source_lat_col]),
+                axis=1,
+                result_type='expand'
+            )
     
     # 找到纬度列的索引
     lat_index = df.columns.get_loc(source_lat_col)
