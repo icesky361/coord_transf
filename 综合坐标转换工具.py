@@ -218,38 +218,10 @@ class CoordinateInferenceConverter:
         lng_keywords = ['经度', 'longitude', 'lng']
         lat_keywords = ['纬度', 'latitude', 'lat']
 
-        # 查找经度列
-        lng_col = None
-        for col in df.columns:
-            col_lower = col.lower()
-            if any(keyword.lower() in col_lower for keyword in keywords) and \
-               any(lng_key in col_lower for lng_key in lng_keywords):
-                lng_col = col
-                break
-
-        # 查找纬度列
-        lat_col = None
-        for col in df.columns:
-            col_lower = col.lower()
-            if any(keyword.lower() in col_lower for keyword in keywords) and \
-               any(lat_key in col_lower for lat_key in lat_keywords):
-                lat_col = col
-                break
-
-        # 如果没有找到带关键词的列，尝试查找通用的经纬度列
-        if lng_col is None:
-            for col in df.columns:
-                col_lower = col.lower()
-                if any(lng_key in col_lower for lng_key in lng_keywords):
-                    lng_col = col
-                    break
-
-        if lat_col is None:
-            for col in df.columns:
-                col_lower = col.lower()
-                if any(lat_key in col_lower for lat_key in lat_keywords):
-                    lat_col = col
-                    break
+        # 使用通用函数查找经度列
+        lng_col = find_column_by_keywords(df, keywords, '经度')
+        # 使用通用函数查找纬度列
+        lat_col = find_column_by_keywords(df, keywords, '纬度')
 
         if lng_col and lat_col:
             print(f"识别到{column_type}坐标列: 经度='{lng_col}', 纬度='{lat_col}'")
@@ -289,6 +261,32 @@ class CoordinateInferenceConverter:
             df['高德纬度'] = target_lat
 
         return df
+
+# 中国地区经纬度合理范围常量
+CHINA_LNG_MIN, CHINA_LNG_MAX = 73.66, 135.05
+CHINA_LAT_MIN, CHINA_LAT_MAX = 3.86, 53.55
+
+# 坐标范围校验函数
+def check_coordinates_in_range(df, lng_col, lat_col):
+    """
+    检查坐标是否在中国地区合理范围内
+    :param df: 数据框
+    :param lng_col: 经度列名
+    :param lat_col: 纬度列名
+    :return: 超出范围的行信息列表（格式：[(DataFrame索引, Excel行号, 经度值, 纬度值)]）
+    """
+    lng_min, lng_max = CHINA_LNG_MIN, CHINA_LNG_MAX
+    lat_min, lat_max = CHINA_LAT_MIN, CHINA_LAT_MAX
+    out_of_range = []
+    for idx, row in df.iterrows():
+        try:
+            lng = float(row[lng_col])
+            lat = float(row[lat_col])
+            if not (CHINA_LNG_MIN <= lng <= CHINA_LNG_MAX and CHINA_LAT_MIN <= lat <= CHINA_LAT_MAX):
+                out_of_range.append((idx, idx + 2, lng, lat))  # Excel行号=DataFrame索引+2（首行是标题）
+        except ValueError:
+            out_of_range.append((idx, idx + 2, row[lng_col], row[lat_col]))
+    return out_of_range
 
 # 智能识别列名函数
 def find_column_by_keywords(df, type_keywords, coord_keyword):
@@ -341,37 +339,20 @@ def batch_convert(input_file, output_file, convert_func, source_type, target_typ
     if source_lng_col is None or source_lat_col is None:
         raise ValueError(f"无法找到{source_type}经纬度列，请确保Excel文件包含经度和纬度列")
     
-    # 坐标合理性校验
-    china_lng_min, china_lng_max = 73.66, 135.05
-    china_lat_min, china_lat_max = 3.86, 53.55
-    out_of_range = []
-    
-    for idx, row in df.iterrows():
-        try:
-            lng = float(row[source_lng_col])
-            lat = float(row[source_lat_col])
-            if not (china_lng_min <= lng <= china_lng_max and china_lat_min <= lat <= china_lat_max):
-                out_of_range.append((idx, idx + 2, lng, lat))  # 存储DataFrame索引和Excel行号
-        except ValueError:
-            out_of_range.append((idx, idx + 2, row[source_lng_col], row[source_lat_col]))
+    # 提取坐标范围校验函数
+    out_of_range = check_coordinates_in_range(df, source_lng_col, source_lat_col)
     
     # 创建超出范围的行索引集合
     out_of_range_indices = {idx for idx, _, _, _ in out_of_range}
     
     if out_of_range:
-        print(f"\n警告：发现以下坐标超出中国地区经纬度范围（经度: {china_lng_min}°~{china_lng_max}°，纬度: {china_lat_min}°~{china_lat_max}°）：")
+        print(f"\n警告：发现以下坐标超出中国地区经纬度范围（经度: {CHINA_LNG_MIN}°~{CHINA_LNG_MAX}°，纬度: {CHINA_LAT_MIN}°~{CHINA_LAT_MAX}°）：")
         print("行号\t经度\t纬度")
         for _, row_num, lng, lat in out_of_range:
             print(f"{row_num}\t{lng}\t{lat}")
         
-        # 询问用户是否继续转换
-        while True:
-            choice = input("\n是否继续转换？(y/n): ").strip().lower()
-            if choice in ['y', 'n']:
-                break
-            print("输入无效，请输入'y'或'n'。")
-        
-        if choice == 'n':
+        # 使用通用交互函数确认继续
+        if not confirm_continue("\n是否继续转换？(y/n): "):
             print("程序已终止，未执行坐标转换。")
             return
         else:
